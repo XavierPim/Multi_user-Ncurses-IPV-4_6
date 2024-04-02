@@ -1,1 +1,2 @@
-main src/main.c src/display.c include/display.h
+server src/server.c include/server.h
+client src/client.c include/client.h
