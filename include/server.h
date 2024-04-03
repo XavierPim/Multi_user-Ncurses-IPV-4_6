@@ -2,7 +2,6 @@
 #define COMP4981_ASS3_SERVER_H
 
 #include <arpa/inet.h>
-#include <ncurses.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,17 +22,19 @@ typedef struct
     int occupied;
 } Player;
 
-// Initialize player positions
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
-static Player players[MAX_PLAYERS] = {
-  // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-    {TENNER,  0,       0}, // North
-    {TENNER,  TWENNER, 0}, // South
-    {0,       TENNER,  0}, // West
-    {TWENNER, TENNER,  0}  // East
-};
-// Function to update the position of a player
-void update_position(Player *player, int dx, int dy);
+// Structure to hold client information
+typedef struct
+{
+    struct sockaddr_in addr;
+    int                player_id;
+} Client;
 
-int assign_position(void);
+static Client clients[MAX_PLAYERS];    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+static int    num_clients = 0;         // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+// Function declarations
+void update_position(Player *players, int player_id, int dx, int dy);
+int  assign_position(Player *players);
+int  find_or_assign_client(struct sockaddr_in *cliaddr, Player *player);
+void broadcast_positions(int sockfd, Player *players);
 #endif    // COMP4981_ASS3_SERVER_H
