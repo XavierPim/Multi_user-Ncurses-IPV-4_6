@@ -210,6 +210,11 @@ tramp
 # elpa packages
 /elpa/
 
+/.flags/
+
+*.sh
+
+
 # reftex files
 *.rel
 
