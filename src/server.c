@@ -6,13 +6,16 @@ int main(int argc, const char *argv[])
     struct sockaddr_in servaddr;
     const char        *ip = argv[1];
     char              *endptr;
-    long               port                 = strtol(argv[2], &endptr, TENNER);
-    Player             players[MAX_PLAYERS] = {
-        {TENNER,  0,       0}, // North
-        {TENNER,  TWENNER, 0}, // South
-        {0,       TENNER,  0}, // West
-        {TWENNER, TENNER,  0}  // East
-    };
+    long               port = strtol(argv[2], &endptr, TENNER);
+    Player             players[MAX_PLAYERS];
+
+    for(int i = 0; i < MAX_PLAYERS; i++)
+    {
+        players[i].occupied = 0;    // Initialize to 0 (not occupied)
+        players[i].x        = 0;    // Initialize x position
+        players[i].y        = 0;    // Initialize y position
+    }
+
     if(argc != 3)
     {
         fprintf(stderr, "Usage: %s <IP> <Port>\n", argv[0]);
@@ -49,11 +52,11 @@ int main(int argc, const char *argv[])
         struct sockaddr_in cliaddr;
         char               buffer[MAXLINE];
         socklen_t          len = sizeof(cliaddr);
+        int                player_id;
         ssize_t            n;
+        char              *endPtr;
         int                dx;
         int                dy;
-        char              *endPtr;
-        int                player_id;
 
         n         = recvfrom(sockfd, buffer, MAXLINE, 0, (struct sockaddr *)&cliaddr, &len);
         buffer[n] = '\0';
@@ -62,6 +65,7 @@ int main(int argc, const char *argv[])
         {
             break;    // Exit the loop if the "quit" message is received
         }
+
         player_id = find_or_assign_client(&cliaddr, players);
         if(player_id == -1)
         {
@@ -72,10 +76,7 @@ int main(int argc, const char *argv[])
         dy = (int)strtol(endPtr, NULL, TENNER);
 
         update_position(players, player_id, dx, dy);
-
         printf("Updated player %d position to (%d, %d)\n", player_id, players[player_id].x, players[player_id].y);
-
-        // Broadcast the updated positions to all clients
         broadcast_positions(sockfd, players);
     }
 
@@ -108,7 +109,6 @@ int find_or_assign_client(struct sockaddr_in *cliaddr, Player *players)
             return player_id;
         }
     }
-
     return -1;    // No available positions
 }
 
@@ -119,7 +119,6 @@ void update_position(Player *players, int player_id, int dx, int dy)
     players[player_id].y += dy;
 }
 
-// Assign an unoccupied position to a new player
 int assign_position(Player *players)
 {
     for(int i = 0; i < MAX_PLAYERS; i++)
@@ -127,6 +126,8 @@ int assign_position(Player *players)
         if(!players[i].occupied)
         {
             players[i].occupied = 1;
+            players[i].x        = 0;    // Initialize position to (0, 0)
+            players[i].y        = 0;
             return i;
         }
     }
@@ -141,13 +142,14 @@ void broadcast_positions(int sockfd, Player *players)
     int  offset = 0;    // Keep track of the current position in the message buffer
 
     // Construct the message with player positions
-    offset += snprintf(message + offset, (unsigned long)(MAXLINE - offset), "Positions:");
-    for(i = 0; i < MAX_PLAYERS; i++)
+    for(i = 0; i < num_clients; i++)    // Use num_clients instead of MAX_PLAYERS
     {
-        offset += snprintf(message + offset, (unsigned long)(MAXLINE - offset), " %d %d", players[i].x, players[i].y);
+        offset += snprintf(message + offset, (unsigned long)(MAXLINE - offset), "%d %d ", players[i].x, players[i].y);
     }
+
     // Print the message before sending
     printf("Broadcasting: %s\n", message);
+
     // Send the message to all connected clients
     for(i = 0; i < num_clients; i++)
     {

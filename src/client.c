@@ -1,37 +1,85 @@
 #include "../include/client.h"
+#include <ncurses.h>
+#include <sys/select.h>
+
+void update_positions(const char *message, Player *players, int *num_players)
+{
+    int         i = 0;
+    const char *p = message;
+    char       *endPtr;
+
+    while(*p != '\0' && i < MAX_PLAYERS)
+    {
+        int newX;
+        int newY;
+        newX = (int)strtol(p, &endPtr, TENNER);
+        if(p == endPtr)
+        {
+            break;
+        }    // No more numbers to read
+        p = endPtr;
+
+        newY = (int)strtol(p, &endPtr, TENNER);
+        if(p == endPtr)
+        {
+            break;    // No more numbers to read
+        }
+        p = endPtr;
+
+        // Skip any spaces or commas between numbers
+        while(*p == ' ' || *p == ',')
+        {
+            p++;
+        }
+
+        // Update the player's position
+        players[i].x = newX;
+        players[i].y = newY;
+        i++;
+    }
+
+    *num_players = i;    // Update the number of players
+}
+
+void draw_players(Player *players, int num_players)
+{
+    clear();
+    for(int i = 0; i < num_players; i++)
+    {
+        mvprintw(players[i].y, players[i].x, "X");
+    }
+    refresh();
+}
 
 int main(int argc, const char *argv[])
 {
     int                sockfd;
     struct sockaddr_in servaddr;
-    const char        *server_ip = argv[1];
     char               buffer[MAXLINE];
+    ssize_t            n;
+    Player             players[MAX_PLAYERS];
+    int                num_players = MAX_PLAYERS;
     long               server_port;
-    char              *endptr;
+
     if(argc != 3)
     {
         fprintf(stderr, "Usage: %s <Server IP> <Server Port>\n", argv[0]);
         exit(EXIT_FAILURE);
     }
-    server_port = strtol(argv[2], &endptr, TENNER);
-    if(*endptr != '\0')
-    {
-        fprintf(stderr, "Invalid port number.\n");
-        exit(EXIT_FAILURE);
-    }
+
+    server_port = strtol(argv[2], NULL, TENNER);
+
     sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    // Create a socket
     if(sockfd < 0)
     {
         perror("socket creation failed");
         exit(EXIT_FAILURE);
     }
 
-    // Fill server information
     memset(&servaddr, 0, sizeof(servaddr));
     servaddr.sin_family      = AF_INET;
     servaddr.sin_port        = htons((uint16_t)server_port);
-    servaddr.sin_addr.s_addr = inet_addr(server_ip);
+    servaddr.sin_addr.s_addr = inet_addr(argv[1]);
 
     // Initialize ncurses
     initscr();
@@ -41,14 +89,7 @@ int main(int argc, const char *argv[])
 
     while(1)
     {
-        int     ch;
-        ssize_t n;
-        ch = getch();    // Get the arrow key press
-
-        if(ch == TWENNYSEVEN)
-        {             // ESC key
-            break;    // Exit the loop
-        }
+        int ch = getch();    // Get the arrow key press
 
         switch(ch)
         {
@@ -64,82 +105,30 @@ int main(int argc, const char *argv[])
             case KEY_RIGHT:
                 snprintf(buffer, MAXLINE, "1 0");
                 break;
+            case 'q':
+                goto end;    // Quit
             default:
                 continue;    // Ignore other keys
         }
+
         printf("Sending: %s\n", buffer);
-        // Send the coordinate changes to the server
-        if(sendto(sockfd, buffer, strlen(buffer), 0, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
+        if(sendto(sockfd, buffer, strlen(buffer), 0, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
         {
             perror("sendto failed");
             break;
         }
 
-        // Receive the broadcast message from the server
-        n         = recvfrom(sockfd, buffer, MAXLINE, 0, NULL, NULL);
-        buffer[n] = '\0';
-
-        update_positions(buffer);
-        draw_players();
+        n = recvfrom(sockfd, buffer, MAXLINE, 0, NULL, NULL);
+        if(n > 0)
+        {
+            buffer[n] = '\0';
+            update_positions(buffer, players, &num_players);
+            draw_players(players, num_players);
+        }
     }
 
-    // End ncurses mode
-    endwin();
-
+end:
+    endwin();    // End ncurses mode
     close(sockfd);
     return 0;
-}
-
-void update_positions(const char *message)
-{
-    int         i;
-    const char *p = message + strlen("Positions:");
-    char       *endPtr;
-
-    for(i = 0; i < MAX_PLAYERS; i++)
-    {
-        int newX;
-        int newY;
-        if(!p)
-        {
-            break;    // Check if pointer is NULL
-        }
-
-        errno = 0;
-        newX  = (int)strtol(p, &endPtr, TENNER);
-        if(p == endPtr || errno == ERANGE)
-        {
-            break;    // Check for valid conversion and range errors
-        }
-        p = endPtr;
-
-        newY = (int)strtol(p, &endPtr, TENNER);
-        if(p == endPtr)
-        {
-            break;    // Check for valid conversion
-        }
-        p = strchr(p, ',');
-        if(p)
-        {
-            p += 2;    // Skip to the next player's coordinates
-        }
-
-        // Check if new positions are within bounds
-        if(newX >= 0 && newX < MAX_WIDTH && newY >= 0 && newY < MAX_HEIGHT)
-        {
-            players[i].x = newX;
-            players[i].y = newY;
-        }
-    }
-}
-
-void draw_players(void)
-{
-    int i;
-    clear();
-    for(i = 0; i < MAX_PLAYERS; i++)
-    {
-        mvprintw(players[i].y, players[i].x, "X");
-    }
-    refresh();
 }

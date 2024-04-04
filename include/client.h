@@ -20,11 +20,11 @@
 
 typedef struct
 {
-    int x, y;
+    int x;
+    int y;
 } Player;
 
-void          update_positions(const char *message);
-void          draw_players(void);
-static Player players[MAX_PLAYERS];    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+void update_positions(const char *message, Player *players, int *num_players);
+void draw_players(Player *players, int num_players);
 
 #endif    // COMP4981_ASS3_CLIENT_H
